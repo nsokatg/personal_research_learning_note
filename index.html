@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Deep-Dive Learning Note (Enterprise Optimized)</title>
+    <!-- Tailwind CSSの設定オブジェクト（安全な初期化パターン） -->
+    <script>
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
+            theme: {
+                extend: {
+                    typography: {
+                        DEFAULT: {
+                            css: {
+                                maxWidth: 'none',
+                                color: '#334155',
+                                h1: { color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.3em' },
+                                h2: { color: '#1e293b', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.2em', marginTop: '1.5em' },
+                                h3: { color: '#334155', marginTop: '1.2em' },
+                                ul: { listStyleType: 'disc' },
+                                ol: { listStyleType: 'decimal' },
+                                li: { marginTop: '0.2em', marginBottom: '0.2em' },
+                            },
+                        },
+                    },
+                },
+            },
+        };
+    </script>
+    <!-- 公式推奨のプラグイン読み込み付きTailwind CSS v3 CDN -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- DOMPurify 最新安定版 (3.4.16) -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white shadow-md">
+        <div class="max-w-[1400px] mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <span>📚</span> Personal Learning Note & Deep-Dive
+            </h1>
+            <button id="settingsBtn" class="text-xs bg-indigo-700 hover:bg-indigo-800 px-3 py-1.5 rounded-lg transition">
+                API設定・モデル変更
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-[1400px] w-full mx-auto p-4 flex flex-col gap-6">
+
+        <!-- API Key & Settings Panel (オートセーブ化対応) -->
+        <div id="settingsCard" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hidden flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                <h2 class="text-sm font-bold text-slate-700">Google Gemini 設定 & 接続管理</h2>
+                <button id="closeSettingsBtn" class="text-xs text-slate-400 hover:text-slate-600">✕ 閉じる</button>
+            </div>
+            
+            <div class="flex flex-col gap-1.5">
+                <label for="modelNameInput" class="text-xs font-medium text-slate-600">使用するモデル名 (Model Name)</label>
+                <input type="text" id="modelNameInput" value="gemini-2.5-flash" 
+                    class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <p class="text-[11px] text-slate-400">※入力内容は自動保存されます。接続テストを行って正常に応答するか確認してください。</p>
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+                <label for="apiKeyInput" class="text-xs font-medium text-slate-600">Gemini API キー</label>
+                <div class="flex flex-col sm:flex-row gap-3 items-center">
+                    <div class="relative flex-1 w-full">
+                        <input type="password" id="apiKeyInput" placeholder="AIzaSy..." 
+                            class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-16">
+                        <button id="toggleMaskBtn" type="button" class="absolute right-3 top-2.5 text-xs text-slate-500 hover:text-indigo-600">表示</button>
+                    </div>
+                    <div class="flex gap-2 w-full sm:w-auto">
+                        <button id="testConnectionBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm transition">
+                            接続テスト
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center text-xs text-slate-500 pt-2 border-t border-slate-100">
+                <p>※APIキーはこのブラウザのローカルストレージに保存されます。共有PCでは保存を避け、APIキーの利用制限を設定してください。</p>
+                <button id="clearKeyBtn" class="text-rose-500 hover:underline">設定をクリア</button>
+            </div>
+            <div id="connectionStatus" class="text-xs hidden p-2 rounded-lg"></div>
+        </div>
+
+        <!-- Theme Input Section -->
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <label for="themeInput" class="block text-sm font-medium text-slate-700 mb-2">調べたいテーマ・キーワード</label>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="text" id="themeInput" placeholder="例: 量子コンピュータの基礎、デザインパターンのメリット など" 
+                    class="flex-1 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button id="generateBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition shadow-sm flex items-center justify-center gap-2">
+                    <span>ノート生成</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Loading State -->
+        <div id="loading" class="hidden flex flex-col items-center justify-center py-12 gap-3">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+            <p class="text-sm text-slate-500">AIが構造化ノートを生成しています...</p>
+        </div>
+
+        <!-- Result & Deep Dive Section -->
+        <div id="resultContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-6 hidden items-start">
+            
+            <!-- Left Column: Main Note Output -->
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+                <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+                    <h2 id="resultTitle" class="text-lg font-bold text-slate-800 truncate max-w-[65%]">学習ノート</h2>
+                    <div class="flex gap-2">
+                        <button id="exportMdBtn" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg transition">
+                            .md保存
+                        </button>
+                        <button id="copyBtn" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg transition">
+                            コピー
+                        </button>
+                    </div>
+                </div>
+                <div id="noteContent" class="prose prose-slate max-w-none text-sm leading-relaxed overflow-y-auto max-h-[70vh] pr-1"></div>
+            </section>
+
+            <!-- Right Column: Deep Dive Chat & Quick Chips -->
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[75vh]">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
+                    <span>🔍</span> さらに深掘りする
+                </h3>
+
+                <!-- Quick Dive Chips -->
+                <div class="flex flex-wrap gap-1.5 mb-3">
+                    <button class="quick-chip text-xs bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 px-2.5 py-1 rounded-lg transition border border-slate-200" data-query="具体例やユースケースを教えてください">💡 具体例</button>
+                    <button class="quick-chip text-xs bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 px-2.5 py-1 rounded-lg transition border border-slate-200" data-query="メリットとデメリットを比較して">⚖️ メデメ</button>
+                    <button class="quick-chip text-xs bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 px-2.5 py-1 rounded-lg transition border border-slate-200" data-query="初心者向けに分かりやすいたとえ話で説明して">👶 かみ砕き</button>
+                    <button class="quick-chip text-xs bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 px-2.5 py-1 rounded-lg transition border border-slate-200" data-query="一般的な技術トレンドや今後の展望について教えて">📈 トレンド</button>
+                </div>
+
+                <div id="chatHistory" class="flex-1 flex flex-col gap-3 overflow-y-auto pr-2 mb-3">
+                    <p class="text-xs text-slate-400 text-center my-auto">上のノートに関して質問したり、上のクイックボタンで深掘りできます。</p>
+                </div>
+
+                <!-- Chat Input Area -->
+                <div class="flex gap-2 pt-2 border-t border-slate-100">
+                    <input type="text" id="chatInput" placeholder="追加の疑問を入力 (Enter送信)..." 
+                        class="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button id="chatSendBtn" class="bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm transition">
+                        送信
+                    </button>
+                </div>
+            </section>
+
+        </div>
+
+    </main>
+
+    <script>
+        // DOM Elements
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const modelNameInput = document.getElementById('modelNameInput');
+        const clearKeyBtn = document.getElementById('clearKeyBtn');
+        const testConnectionBtn = document.getElementById('testConnectionBtn');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const settingsCard = document.getElementById('settingsCard');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+        const toggleMaskBtn = document.getElementById('toggleMaskBtn');
+        
+        const themeInput = document.getElementById('themeInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const loading = document.getElementById('loading');
+        const resultContainer = document.getElementById('resultContainer');
+        const resultTitle = document.getElementById('resultTitle');
+        const noteContent = document.getElementById('noteContent');
+        const copyBtn = document.getElementById('copyBtn');
+        const exportMdBtn = document.getElementById('exportMdBtn');
+        
+        const chatHistory = document.getElementById('chatHistory');
+        const chatInput = document.getElementById('chatInput');
+        const chatSendBtn = document.getElementById('chatSendBtn');
+        const quickChips = document.querySelectorAll('.quick-chip');
+
+        let currentMarkdown = '';
+        let currentTheme = '';
+        let currentModel = '';
+        let chatContextHistory = [];
+
+        let isGenerating = false;
+        let isChatProcessing = false;
+
+        const SYSTEM_INSTRUCTION_TEXT = `あなたは優秀なパーソナル学習アシスタントです。
+ユーザーが指定したテーマや質問について、基本から応用までの知識を構造化してわかりやすく回答してください。`;
+
+        // 設定の読み込み
+        const savedKey = localStorage.getItem('gemini_api_key');
+        const savedModel = localStorage.getItem('gemini_model_name');
+
+        if (savedKey) {
+            apiKeyInput.value = savedKey;
+        } else {
+            settingsCard.classList.remove('hidden');
+        }
+
+        if (savedModel) {
+            modelNameInput.value = savedModel;
+        }
+
+        settingsBtn.addEventListener('click', () => settingsCard.classList.toggle('hidden'));
+        closeSettingsBtn.addEventListener('click', () => settingsCard.classList.add('hidden'));
+
+        toggleMaskBtn.addEventListener('click', () => {
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                toggleMaskBtn.textContent = '隠す';
+            } else {
+                apiKeyInput.type = 'password';
+                toggleMaskBtn.textContent = '表示';
+            }
+        });
+
+        // ライブオートセーブ（入力時に即時LocalStorageへ反映し不整合を防ぐ）
+        function saveSettingsToStorage() {
+            const key = apiKeyInput.value.trim();
+            const modelName = modelNameInput.value.trim() || 'gemini-2.5-flash';
+            if (key) {
+                localStorage.setItem('gemini_api_key', key);
+            }
+            localStorage.setItem('gemini_model_name', modelName);
+        }
+
+        apiKeyInput.addEventListener('input', saveSettingsToStorage);
+        modelNameInput.addEventListener('input', saveSettingsToStorage);
+
+        clearKeyBtn.addEventListener('click', () => {
+            if (confirm('保存された設定をクリアしますか？')) {
+                localStorage.removeItem('gemini_api_key');
+                localStorage.removeItem('gemini_model_name');
+                apiKeyInput.value = '';
+                modelNameInput.value = 'gemini-2.5-flash';
+                alert('設定をクリアしました。');
+            }
+        });
+
+        function getModelName() {
+            return modelNameInput.value.trim() || 'gemini-2.5-flash';
+        }
+
+        function showConnectionPending(msg) {
+            connectionStatus.textContent = msg;
+            connectionStatus.className = 'text-xs p-2 rounded-lg block bg-slate-100 text-slate-600 border border-slate-200';
+        }
+
+        function showConnectionStatus(msg, isSuccess) {
+            connectionStatus.textContent = msg;
+            connectionStatus.className = `text-xs p-2 rounded-lg block ${isSuccess ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`;
+        }
+
+        testConnectionBtn.addEventListener('click', async () => {
+            const key = apiKeyInput.value.trim();
+            const model = getModelName();
+            if (!key) {
+                showConnectionStatus('APIキーが入力されていません。', false);
+                return;
+            }
+
+            testConnectionBtn.disabled = true;
+            testConnectionBtn.textContent = 'テスト中...';
+            showConnectionPending(`接続を確認しています (${model})...`);
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': key
+                    },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: 'Ping test' }] }]
+                    }),
+                    signal: controller.signal
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error?.message || `HTTP Error: ${response.status}`);
+
+                const candidate = data.candidates?.[0];
+                if (!candidate) throw new Error('有効な応答候補を取得できませんでした。');
+                if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+                    throw new Error(`応答がブロックされました（理由: ${candidate.finishReason}）。`);
+                }
+                const text = candidate.content?.parts?.[0]?.text;
+                if (!text || !text.trim()) throw new Error('空の応答が返されました。');
+
+                showConnectionStatus(`✔ 接続・応答テスト成功！ (${model})`, true);
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    showConnectionStatus('✖ 接続テストがタイムアウトしました（30秒経過）。', false);
+                } else {
+                    showConnectionStatus(`✖ 接続失敗: ${err.message}`, false);
+                }
+            } finally {
+                clearTimeout(timeoutId);
+                testConnectionBtn.disabled = false;
+                testConnectionBtn.textContent = '接続テスト';
+            }
+        });
+
+        function renderSafeMarkdown(markdownText) {
+            const rawHtml = marked.parse(markdownText);
+            return DOMPurify.sanitize(rawHtml);
+        }
+
+        function updateUIState() {
+            generateBtn.disabled = isGenerating || isChatProcessing;
+            themeInput.disabled = isGenerating;
+            
+            chatSendBtn.disabled = isGenerating || isChatProcessing || !currentMarkdown;
+            chatInput.disabled = isGenerating || isChatProcessing || !currentMarkdown;
+
+            quickChips.forEach(chip => {
+                if (isGenerating || isChatProcessing || !currentMarkdown) {
+                    chip.classList.add('opacity-50', 'pointer-events-none');
+                } else {
+                    chip.classList.remove('opacity-50', 'pointer-events-none');
+                }
+            });
+
+            if (isGenerating) {
+                generateBtn.classList.add('opacity-50');
+            } else {
+                generateBtn.classList.remove('opacity-50');
+            }
+        }
+
+        // ノート生成
+        generateBtn.addEventListener('click', async () => {
+            if (isGenerating || isChatProcessing) return;
+
+            const apiKey = apiKeyInput.value.trim();
+            const model = getModelName();
+            const theme = themeInput.value.trim();
+
+            if (!apiKey) {
+                alert('Gemini APIキーを設定してください。');
+                settingsCard.classList.remove('hidden');
+                return;
+            }
+            if (!theme) {
+                alert('テーマを入力してください。');
+                return;
+            }
+
+            isGenerating = true;
+            updateUIState();
+            loading.classList.remove('hidden');
+
+            const systemInstruction = {
+                parts: [{ text: SYSTEM_INSTRUCTION_TEXT + "\nMarkdown形式の箇条書きで以下の構成でまとめてください：\n1. **概要・基本知識**\n2. **応用・発展的知識**\n3. **重要なキーワード解説**" }]
+            };
+
+            const prompt = `テーマ：「${theme}」について基本から応用まで箇条書きでわかりやすくまとめてください。`;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': apiKey
+                    },
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                        systemInstruction: systemInstruction
+                    }),
+                    signal: controller.signal
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error?.message || `API Error: ${response.status}`);
+
+                const candidate = data.candidates?.[0];
+                if (!candidate) throw new Error('有効な応答候補（candidate）が取得できませんでした。');
+
+                if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+                    throw new Error(`生成が正常に完了しませんでした（理由: ${candidate.finishReason}）。安全性の理由などでブロックされた可能性があります。`);
+                }
+
+                const text = candidate.content?.parts?.[0]?.text;
+                if (!text || !text.trim()) throw new Error('AIからの応答テキストが空です。');
+                
+                currentMarkdown = text;
+                currentTheme = theme;
+                currentModel = model;
+                chatContextHistory = [];
+                chatHistory.innerHTML = '<p class="text-xs text-slate-400 text-center my-auto">上のノートに関して質問したり、上のクイックボタンで深掘りできます。</p>';
+
+                resultTitle.textContent = `テーマ: ${theme} (${model})`;
+                noteContent.innerHTML = renderSafeMarkdown(text);
+                resultContainer.classList.remove('hidden');
+
+                chatContextHistory.push({ role: 'user', parts: [{ text: prompt }] });
+                chatContextHistory.push({ role: 'model', parts: [{ text: text }] });
+
+            } catch (err) {
+                const errorDetail = err.name === 'AbortError' 
+                    ? 'リクエストがタイムアウトしました（45秒経過）。' 
+                    : err.message;
+                
+                if (currentMarkdown) {
+                    alert(`ノート生成エラー: ${errorDetail}\n\n※前回のノートは保持されています。`);
+                } else {
+                    alert(`ノート生成エラー: ${errorDetail}`);
+                }
+            } finally {
+                clearTimeout(timeoutId);
+                isGenerating = false;
+                loading.classList.add('hidden');
+                updateUIState();
+            }
+        });
+
+        // チャット送信（スライディングウィンドウによる履歴最適化：初期ノート＋直近6件を維持）
+        async function handleChatSend(questionText) {
+            if (isGenerating || isChatProcessing || !currentMarkdown) return;
+
+            const apiKey = apiKeyInput.value.trim();
+            const model = currentModel || getModelName();
+            const question = questionText || chatInput.value.trim();
+            if (!question || !apiKey) return;
+
+            if (chatHistory.querySelector('p')) {
+                chatHistory.innerHTML = '';
+            }
+
+            const userBubble = appendChatBubble('user', question);
+            chatInput.value = '';
+
+            isChatProcessing = true;
+            updateUIState();
+
+            // 履歴最適化: 最初のプロンプト＆ノート生成結果（インデックス0, 1）を維持し、直近の履歴（最大6件）を結合
+            const baseHistory = chatContextHistory.slice(0, 2);
+            const recentHistory = chatContextHistory.slice(2);
+            const MAX_RECENT_TURNS = 6; // 直近のやり取り（ユーザー・AIペアで最大3往復）
+            const trimmedRecent = recentHistory.slice(-MAX_RECENT_TURNS);
+
+            const optimizedHistory = [...baseHistory, ...trimmedRecent, { role: 'user', parts: [{ text: question }] }];
+
+            const systemInstruction = {
+                parts: [{ text: SYSTEM_INSTRUCTION_TEXT + "\nこれまでのノートおよび直近の文脈を踏まえて、ユーザーの追加質問に正確に回答してください。" }]
+            };
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': apiKey
+                    },
+                    body: JSON.stringify({
+                        contents: optimizedHistory,
+                        systemInstruction: systemInstruction
+                    }),
+                    signal: controller.signal
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error?.message || `API Error: ${response.status}`);
+
+                const candidate = data.candidates?.[0];
+                if (!candidate) throw new Error('応答候補を取得できませんでした。');
+                if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+                    throw new Error(`応答がブロックされました（理由: ${candidate.finishReason}）。`);
+                }
+
+                const answer = candidate.content?.parts?.[0]?.text;
+                if (!answer || !answer.trim()) throw new Error('空の回答が返されました。');
+                
+                chatContextHistory.push({ role: 'user', parts: [{ text: question }] });
+                chatContextHistory.push({ role: 'model', parts: [{ text: answer }] });
+
+                appendChatBubble('model', answer);
+
+            } catch (err) {
+                if (userBubble && userBubble.parentNode) {
+                    userBubble.parentNode.removeChild(userBubble);
+                }
+                chatInput.value = question;
+
+                const errorMsg = err.name === 'AbortError' 
+                    ? '❌ タイムアウトエラー: 応答が30秒以内に返りませんでした。（質問を入力欄に戻しました）' 
+                    : `❌ 通信・検証エラー: ${err.message}（質問を入力欄に戻しました）`;
+                
+                appendErrorChatBubble(errorMsg);
+            } finally {
+                clearTimeout(timeoutId);
+                isChatProcessing = false;
+                updateUIState();
+                chatInput.focus();
+            }
+        }
+
+        chatSendBtn.addEventListener('click', () => handleChatSend());
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleChatSend();
+            }
+        });
+
+        quickChips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                const query = chip.getAttribute('data-query');
+                handleChatSend(query);
+            });
+        });
+
+        function appendChatBubble(role, text) {
+            const div = document.createElement('div');
+            div.className = `p-3 rounded-xl text-sm max-w-[95%] ${role === 'user' ? 'bg-indigo-50 text-indigo-900 ml-auto' : 'bg-slate-100 text-slate-800 mr-auto'}`;
+            div.innerHTML = renderSafeMarkdown(text);
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            return div;
+        }
+
+        function appendErrorChatBubble(text) {
+            const div = document.createElement('div');
+            div.className = 'p-3 rounded-xl text-xs max-w-[95%] bg-rose-50 text-rose-700 border border-rose-200 mr-auto';
+            div.textContent = text;
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        copyBtn.addEventListener('click', async () => {
+            if (!currentMarkdown) return;
+            try {
+                await navigator.clipboard.writeText(currentMarkdown);
+                alert('Markdownをクリップボードにコピーしました！');
+            } catch (err) {
+                fallbackCopyText(currentMarkdown);
+            }
+        });
+
+        function fallbackCopyText(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.top = '0';
+            textArea.style.left = '0';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    alert('Markdownをコピーしました（代替方式）！');
+                } else {
+                    throw new Error('execCommand returned false');
+                }
+            } catch (err) {
+                alert('コピーに失敗しました。お手数ですがノートテキストを手動で選択してコピーしてください。');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        exportMdBtn.addEventListener('click', () => {
+            if (!currentMarkdown) return;
+
+            let safeTitle = (currentTheme || 'learning-note')
+                .replace(/[\\/:*?"<>|]/g, '_')
+                .replace(/\s+/g, '_')
+                .trim();
+            
+            if (safeTitle.length > 50) {
+                safeTitle = safeTitle.substring(0, 50);
+            }
+
+            const filename = `${safeTitle}.md`;
+
+            const blob = new Blob([currentMarkdown], { type: 'text/markdown;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
