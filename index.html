@@ -338,7 +338,7 @@
             }
         }
 
-        // ノート生成
+        // ノート生成 (maxOutputTokens追加で途切れを防止)
         generateBtn.addEventListener('click', async () => {
             if (isGenerating || isChatProcessing) return;
 
@@ -378,7 +378,10 @@
                     },
                     body: JSON.stringify({
                         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        systemInstruction: systemInstruction
+                        systemInstruction: systemInstruction,
+                        generationConfig: {
+                            maxOutputTokens: 8192
+                        }
                     }),
                     signal: controller.signal
                 });
@@ -427,7 +430,7 @@
             }
         });
 
-        // チャット送信（スライディングウィンドウによる履歴最適化：初期ノート＋直近6件を維持）
+        // チャット送信（maxOutputTokens追加で途切れを防止）
         async function handleChatSend(questionText) {
             if (isGenerating || isChatProcessing || !currentMarkdown) return;
 
@@ -446,10 +449,9 @@
             isChatProcessing = true;
             updateUIState();
 
-            // 履歴最適化: 最初のプロンプト＆ノート生成結果（インデックス0, 1）を維持し、直近の履歴（最大6件）を結合
             const baseHistory = chatContextHistory.slice(0, 2);
             const recentHistory = chatContextHistory.slice(2);
-            const MAX_RECENT_TURNS = 6; // 直近のやり取り（ユーザー・AIペアで最大3往復）
+            const MAX_RECENT_TURNS = 6;
             const trimmedRecent = recentHistory.slice(-MAX_RECENT_TURNS);
 
             const optimizedHistory = [...baseHistory, ...trimmedRecent, { role: 'user', parts: [{ text: question }] }];
@@ -470,7 +472,10 @@
                     },
                     body: JSON.stringify({
                         contents: optimizedHistory,
-                        systemInstruction: systemInstruction
+                        systemInstruction: systemInstruction,
+                        generationConfig: {
+                            maxOutputTokens: 8192
+                        }
                     }),
                     signal: controller.signal
                 });
