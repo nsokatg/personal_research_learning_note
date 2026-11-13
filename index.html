@@ -60,7 +60,7 @@
             
             <div class="flex flex-col gap-1.5">
                 <label for="modelNameInput" class="text-xs font-medium text-slate-600">使用するモデル名 (Model Name)</label>
-                <input type="text" id="modelNameInput" value="gemini-2.5-flash" 
+                <input type="text" id="modelNameInput" value="gemini-3.5-flash-lite" 
                     class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <p class="text-[11px] text-slate-400">※入力内容は自動保存されます。接続テストを行って正常に応答するか確認してください。</p>
             </div>
@@ -224,7 +224,7 @@
         // ライブオートセーブ（入力時に即時LocalStorageへ反映し不整合を防ぐ）
         function saveSettingsToStorage() {
             const key = apiKeyInput.value.trim();
-            const modelName = modelNameInput.value.trim() || 'gemini-2.5-flash';
+            const modelName = modelNameInput.value.trim() || 'gemini-3.5-flash-lite';
             if (key) {
                 localStorage.setItem('gemini_api_key', key);
             }
@@ -239,13 +239,13 @@
                 localStorage.removeItem('gemini_api_key');
                 localStorage.removeItem('gemini_model_name');
                 apiKeyInput.value = '';
-                modelNameInput.value = 'gemini-2.5-flash';
+                modelNameInput.value = 'gemini-3.5-flash-lite';
                 alert('設定をクリアしました。');
             }
         });
 
         function getModelName() {
-            return modelNameInput.value.trim() || 'gemini-2.5-flash';
+            return modelNameInput.value.trim() || 'gemini-3.5-flash-lite';
         }
 
         function showConnectionPending(msg) {
